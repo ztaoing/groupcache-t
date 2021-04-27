@@ -23,19 +23,17 @@ import (
 	"strings"
 )
 
-// A ByteView holds an immutable view of bytes.
-// Internally it wraps either a []byte or a string,
-// but that detail is invisible to callers.
-//
-// A ByteView is meant to be used as a value type, not
-// a pointer (like a time.Time).
+// 一个 ByteView 持有对bytes的持久不变的视图
+// 它的内部包含了一个 []byte 和一个string，但是调用者是无法获知的(非导出的)
+
+// A ByteView 是被用来作为一个value类型的，而不是一个指针类型 (例如 time.Time).
 type ByteView struct {
-	// If b is non-nil, b is used, else s is used.
+	// 如果b是非空的, 使用b或者使用s
 	b []byte
 	s string
 }
 
-// Len returns the view's length.
+// 返回视图的长度
 func (v ByteView) Len() int {
 	if v.b != nil {
 		return len(v.b)
@@ -43,7 +41,7 @@ func (v ByteView) Len() int {
 	return len(v.s)
 }
 
-// ByteSlice returns a copy of the data as a byte slice.
+// ByteSlice returns 将数据拷贝一份并作为一个[]byte
 func (v ByteView) ByteSlice() []byte {
 	if v.b != nil {
 		return cloneBytes(v.b)
@@ -51,7 +49,7 @@ func (v ByteView) ByteSlice() []byte {
 	return []byte(v.s)
 }
 
-// String returns the data as a string, making a copy if necessary.
+// String 将数转换为string，并返回, 如果需要的话就制作一个副本
 func (v ByteView) String() string {
 	if v.b != nil {
 		return string(v.b)
@@ -59,7 +57,7 @@ func (v ByteView) String() string {
 	return v.s
 }
 
-// At returns the byte at index i.
+// 返回[]byte中第i个元素
 func (v ByteView) At(i int) byte {
 	if v.b != nil {
 		return v.b[i]
@@ -84,6 +82,7 @@ func (v ByteView) SliceFrom(from int) ByteView {
 }
 
 // Copy copies b into dest and returns the number of bytes copied.
+// 返回copy的数量
 func (v ByteView) Copy(dest []byte) int {
 	if v.b != nil {
 		return copy(dest, v.b)
@@ -110,6 +109,7 @@ func (v ByteView) EqualString(s string) bool {
 	if len(s) != l {
 		return false
 	}
+	// 比较每一个字符
 	for i, bi := range v.b {
 		if bi != s[i] {
 			return false

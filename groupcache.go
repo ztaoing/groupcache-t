@@ -14,14 +14,15 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package groupcache provides a data loading mechanism with caching
+// Package groupcache 提供了一个缓存的数据加载机制，
 // and de-duplication that works across a set of peer processes.
 //
-// Each data Get first consults its local cache, otherwise delegates
+// 每一个数据都会首先向本地缓存获取数据，否则会向数据的拥有者获取 Get first consults its local cache, otherwise delegates
 // to the requested key's canonical owner, which then checks its cache
 // or finally gets the data.  In the common case, many concurrent
 // cache misses across a set of peers for the same key result in just
 // one cache fill.
+// 在常见情况下，由于同一个键，一组对等体之间的许多并发缓存未命中只会导致一个缓存填满。
 package groupcache_t
 
 import (
@@ -37,7 +38,7 @@ import (
 	"github.com/golang/groupcache/singleflight"
 )
 
-// A Getter loads data for a key.
+// 获取key的数据
 type Getter interface {
 	// Get returns the value identified by key, populating dest.
 	//
@@ -48,7 +49,7 @@ type Getter interface {
 	Get(ctx context.Context, key string, dest Sink) error
 }
 
-// A GetterFunc implements Getter with a function.
+// A GetterFunc 实现了Getter接口
 type GetterFunc func(ctx context.Context, key string, dest Sink) error
 
 func (f GetterFunc) Get(ctx context.Context, key string, dest Sink) error {
@@ -137,19 +138,20 @@ func callInitPeerServer() {
 	}
 }
 
-// A Group is a cache namespace and associated data loaded spread over
-// a group of 1 or more machines.
+// A Group is a cache namespace and associated data loaded spread over a group of 1 or more machines.
+// Group 是一个缓存的命名空间，同时将相关联的数据加载后同步到一组机器（1个或多个机器组成）中
 type Group struct {
 	name       string
 	getter     Getter
 	peersOnce  sync.Once
 	peers      PeerPicker
-	cacheBytes int64 // limit for sum of mainCache and hotCache size
+	cacheBytes int64 // 用于限制 mainCache和hotCache和的大小
 
 	// mainCache is a cache of the keys for which this process
-	// (amongst its peers) is authoritative. That is, this cache
-	// contains keys which consistent hash on to this process's
-	// peer number.
+	// (amongst its peers) is authoritative.
+	//That is, this cache contains keys which consistent hash on to this process's peer number.
+	// mainCache是一个存储
+	// mainCache
 	mainCache cache
 
 	// hotCache contains keys/values for which this peer is not
@@ -165,33 +167,33 @@ type Group struct {
 	// loadGroup ensures that each key is only fetched once
 	// (either locally or remotely), regardless of the number of
 	// concurrent callers.
+	// loadGroup确保了每一个key在同一时刻只能有一个在处理，从而避免了并发调用
 	loadGroup flightGroup
 
-	_ int32 // force Stats to be 8-byte aligned on 32-bit platforms
+	_ int32 // 在32位的平台上强制对齐为8字节
 
-	// Stats are statistics on the group.
+	// Stats 是group的统计信息
 	Stats Stats
 }
 
 // flightGroup is defined as an interface which flightgroup.Group
-// satisfies.  We define this so that we may test with an alternate
-// implementation.
+// satisfies.  我们对此进行定义，以便我们可以用另一种方法进行测试执行。
 type flightGroup interface {
-	// Done is called when Do is done.
+	// 当Do处理完成的时候会调动Done.
 	Do(key string, fn func() (interface{}, error)) (interface{}, error)
 }
 
-// Stats are per-group statistics.
+// Stats 是每一个group的统计信息
 type Stats struct {
-	Gets           AtomicInt // any Get request, including from peers
-	CacheHits      AtomicInt // either cache was good
-	PeerLoads      AtomicInt // either remote load or remote cache hit (not an error)
+	Gets           AtomicInt // 任何的Get请求，包括来自peers的Get
+	CacheHits      AtomicInt // either cache was good 任何一个缓存是否命中
+	PeerLoads      AtomicInt // either remote load or remote cache hit (not an error)任何一个远端加载或者远端缓存命中
 	PeerErrors     AtomicInt
-	Loads          AtomicInt // (gets - cacheHits)
-	LoadsDeduped   AtomicInt // after singleflight
-	LocalLoads     AtomicInt // total good local loads
-	LocalLoadErrs  AtomicInt // total bad local loads
-	ServerRequests AtomicInt // gets that came over the network from peers
+	Loads          AtomicInt // (gets - cacheHits) 缓存命中的数量
+	LoadsDeduped   AtomicInt // after singleflight 重复加载的数
+	LocalLoads     AtomicInt // total good local loads 所有成功的本地加载数
+	LocalLoadErrs  AtomicInt // total bad local loads 所有失败的本地加载数
+	ServerRequests AtomicInt // gets that came over the network from peers 通过网络从peers获得请求的数量
 }
 
 // Name returns the name of the group.
@@ -465,7 +467,7 @@ func (c *cache) itemsLocked() int64 {
 	return int64(c.lru.Len())
 }
 
-// An AtomicInt is an int64 to be accessed atomically.
+// An AtomicInt is an int64 to 原子访问
 type AtomicInt int64
 
 // Add atomically adds n to i.

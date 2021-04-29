@@ -82,6 +82,7 @@ func testSetup() {
 
 // TestGetDupSuppressString tests that a Getter's Get method is only called once with two
 // outstanding callers.  This is the string variant.
+// 当有两个外部调用的时候，get方法只会被调用一次
 func TestGetDupSuppressString(t *testing.T) {
 	once.Do(testSetup)
 	// Start two getters. The first should block (waiting reading

@@ -315,12 +315,14 @@ func (g *Group) getLocally(ctx context.Context, key string, dest Sink) (ByteView
 	return dest.view()
 }
 
+// 从peer中查找key
 func (g *Group) getFromPeer(ctx context.Context, peer ProtoGetter, key string) (ByteView, error) {
 	req := &pb.GetRequest{
 		Group: &g.name,
 		Key:   &key,
 	}
 	res := &pb.GetResponse{}
+
 	err := peer.Get(ctx, req, res)
 	if err != nil {
 		return ByteView{}, err

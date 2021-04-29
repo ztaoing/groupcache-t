@@ -29,6 +29,8 @@ type call struct {
 // Group represents a class of work and forms a namespace in which
 // units of work can be executed with duplicate suppression.
 // group使用互斥锁的方式对map进行保护，
+
+// Group是flightGroup接口的一个实现
 type Group struct {
 	mu sync.Mutex       // protects m
 	m  map[string]*call // lazily initialized

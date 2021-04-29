@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// hash 环的一个 实现
+// hash 环的一个实现
 package consistenthash
 
 import (

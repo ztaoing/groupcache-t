@@ -23,25 +23,32 @@ import (
 )
 
 // A Sink receives data from a Get call.
-//
-// Implementation of Getter must call exactly one of the Set methods
-// on success.
+// sink 从调用Get方法中获取数据
+// Implementation of Getter must call exactly one of the Set methods on success.
+// 实现Getter接口必须能够成功调用已经设置的方法中的一个
+
+// stringSink、byteViewSink、protoSink、allocBytesSink都实现了Sink接口
 type Sink interface {
-	// SetString sets the value to s.
+	// SetString 将值设置为一个string
 	SetString(s string) error
 
 	// SetBytes sets the value to the contents of v.
+	// SetBytes将值设置为[]byte
 	// The caller retains ownership of v.
+	// 调用者保留对v的所有权
 	SetBytes(v []byte) error
 
 	// SetProto sets the value to the encoded version of m.
 	// The caller retains ownership of m.
+	// SetProto 将值设置为已经编码后的m
 	SetProto(m proto.Message) error
 
 	// view returns a frozen view of the bytes for caching.
+	// view返回一个用于缓存的bytes的视图
 	view() (ByteView, error)
 }
 
+// 将b复制到一个新的内存空间中
 func cloneBytes(b []byte) []byte {
 	c := make([]byte, len(b))
 	copy(c, b)
@@ -53,37 +60,45 @@ func setSinkView(s Sink, v ByteView) error {
 	// a ByteView. This is a fast path to minimize copies when the
 	// item was already cached locally in memory (where it's
 	// cached as a ByteView)
+	// viewSetter是一个Sink，它同样可以从一个ByteView中接收到数据
+	// 当一个item已经在本地内存中缓存（他被缓存为一个ByteView）的时候，这是一个最小的内存copy的快速路径
 	type viewSetter interface {
 		setView(v ByteView) error
 	}
+	// 将s转换为viewSetter
 	if vs, ok := s.(viewSetter); ok {
 		return vs.setView(v)
 	}
+	// 转换失败
 	if v.b != nil {
 		return s.SetBytes(v.b)
 	}
+	// v.b=nil的时候，设置为string
 	return s.SetString(v.s)
 }
 
 // StringSink returns a Sink that populates the provided string pointer.
+// 返回的是已提供的string的指针
 func StringSink(sp *string) Sink {
 	return &stringSink{sp: sp}
 }
 
+// sink接口的一个实现
 type stringSink struct {
 	sp *string
 	v  ByteView
-	// TODO(bradfitz): track whether any Sets were called.
+	// TODO(bradfitz): track whether any Sets were called.跟踪是否有任何sets被调用了
 }
 
 func (s *stringSink) view() (ByteView, error) {
-	// TODO(bradfitz): return an error if no Set was called
+	// TODO(bradfitz): return an error if no Set was called 如果没有set被调用就返回error
 	return s.v, nil
 }
 
 func (s *stringSink) SetString(v string) error {
 	s.v.b = nil
 	s.v.s = v
+	// 将sp地址中的值设置为v
 	*s.sp = v
 	return nil
 }
@@ -97,6 +112,7 @@ func (s *stringSink) SetProto(m proto.Message) error {
 	if err != nil {
 		return err
 	}
+	// 将序列化后的b存储起来
 	s.v.b = b
 	*s.sp = string(b)
 	return nil
@@ -110,6 +126,7 @@ func ByteViewSink(dst *ByteView) Sink {
 	return &byteViewSink{dst: dst}
 }
 
+// sink接口的一个实现
 type byteViewSink struct {
 	dst *ByteView
 
@@ -158,11 +175,12 @@ func ProtoSink(m proto.Message) Sink {
 	}
 }
 
+// 是sink接口的一个实现
 type protoSink struct {
 	dst proto.Message // authoritative value
 	typ string
 
-	v ByteView // encoded
+	v ByteView // encoded 已编码
 }
 
 func (s *protoSink) view() (ByteView, error) {
@@ -210,11 +228,12 @@ func (s *protoSink) SetProto(m proto.Message) error {
 
 // AllocatingByteSliceSink returns a Sink that allocates
 // a byte slice to hold the received value and assigns
-// it to *dst. The memory is not retained by groupcache.
+// it to *dst. 这个内存是不被groupcache保留的
 func AllocatingByteSliceSink(dst *[]byte) Sink {
 	return &allocBytesSink{dst: dst}
 }
 
+// 是sink的一个实现
 type allocBytesSink struct {
 	dst *[]byte
 	v   ByteView
@@ -274,6 +293,7 @@ func TruncatingByteSliceSink(dst *[]byte) Sink {
 	return &truncBytesSink{dst: dst}
 }
 
+// 是sink接口的一个实现
 type truncBytesSink struct {
 	dst *[]byte
 	v   ByteView

@@ -47,6 +47,7 @@ var (
 	// cacheFills is the number of times stringGroup or
 	// protoGroup's Getter have been called. Read using the
 	// cacheFills function.
+	//  调用次数
 	cacheFills AtomicInt
 )
 
@@ -86,6 +87,7 @@ func TestGetDupSuppressString(t *testing.T) {
 	// Start two getters. The first should block (waiting reading
 	// from stringc) and the second should latch on to the first
 	// one.
+	// 启动了两个getter，第一个会阻塞，等待从stringc中读取数据，第二个会等待一个执行完
 	resc := make(chan string, 2)
 	for i := 0; i < 2; i++ {
 		go func() {
@@ -100,6 +102,7 @@ func TestGetDupSuppressString(t *testing.T) {
 
 	// Wait a bit so both goroutines get merged together via
 	// singleflight.
+	//  等待一会，然后两个goroutine get请求会通过singleflight合并
 	// TODO(bradfitz): decide whether there are any non-offensive
 	// debug/test hooks that could be added to singleflight to
 	// make a sleep here unnecessary.
@@ -107,6 +110,7 @@ func TestGetDupSuppressString(t *testing.T) {
 
 	// Unblock the first getter, which should unblock the second
 	// as well.
+	// 不会阻塞第一个，同时也不阻塞第二个
 	stringc <- "foo"
 
 	for i := 0; i < 2; i++ {
@@ -186,6 +190,7 @@ func TestCaching(t *testing.T) {
 	}
 }
 
+// 清除数据
 func TestCacheEviction(t *testing.T) {
 	once.Do(testSetup)
 	testKey := "TestCacheEviction-key"
@@ -448,6 +453,7 @@ func TestNoDedup(t *testing.T) {
 func TestGroupStatsAlignment(t *testing.T) {
 	var g Group
 	off := unsafe.Offsetof(g.Stats)
+	// 最后一个元素的地址偏移：是否是8字节对齐
 	if off%8 != 0 {
 		t.Fatal("Stats structure is not 8-byte aligned.")
 	}

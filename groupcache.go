@@ -41,11 +41,7 @@ import (
 // 获取key的数据
 type Getter interface {
 	// Get returns the value identified by key, populating dest.
-	//
-	// The returned data must be unversioned. That is, key must
-	// uniquely describe the loaded data, without an implicit
-	// current time, and without relying on cache expiration
-	// mechanisms.
+	// 返回的数据必须是未版本化的。 也就是说，密钥必须唯一地描述加载的数据，没有隐式当前时间，并且不依赖于缓存过期机制。
 	Get(ctx context.Context, key string, dest Sink) error
 }
 
@@ -123,8 +119,7 @@ func RegisterNewGroupHook(fn func(*Group)) {
 	newGroupHook = fn
 }
 
-// RegisterServerStart registers a hook that is run when the first
-// group is created.
+// RegisterServerStart注册了一个钩子，他会在第一个group被创建的时候运行
 func RegisterServerStart(fn func()) {
 	if initPeerServer != nil {
 		panic("RegisterServerStart called more than once")
@@ -186,7 +181,7 @@ type flightGroup interface {
 // Stats 是每一个group的统计信息
 type Stats struct {
 	Gets           AtomicInt // 任何的Get请求，包括来自peers的Get
-	CacheHits      AtomicInt // either cache was good 任何一个缓存是否命中
+	CacheHits      AtomicInt // either cache was good 缓存命中
 	PeerLoads      AtomicInt // either remote load or remote cache hit (not an error)任何一个远端加载或者远端缓存命中
 	PeerErrors     AtomicInt
 	Loads          AtomicInt // (gets - cacheHits) 缓存命中的数量
@@ -203,20 +198,25 @@ func (g *Group) Name() string {
 
 func (g *Group) initPeers() {
 	if g.peers == nil {
+		// 通过group name获取peers
 		g.peers = getPeers(g.name)
 	}
 }
 
 func (g *Group) Get(ctx context.Context, key string, dest Sink) error {
 	g.peersOnce.Do(g.initPeers)
+	// 将get请求的计数加一
 	g.Stats.Gets.Add(1)
+
 	if dest == nil {
 		return errors.New("groupcache: nil dest Sink")
 	}
+	// 通过key查询缓存，返回命中的值和是否命中
 	value, cacheHit := g.lookupCache(key)
-
 	if cacheHit {
+		// 如果命中了缓存，就将缓存命中的计数加一
 		g.Stats.CacheHits.Add(1)
+		//并将value保存到destination中
 		return setSinkView(dest, value)
 	}
 
@@ -224,6 +224,7 @@ func (g *Group) Get(ctx context.Context, key string, dest Sink) error {
 	// track of whether the dest was already populated. One caller
 	// (if local) will set this; the losers will not. The common
 	// case will likely be one caller.
+	// 没有命中缓存
 	destPopulated := false
 	value, destPopulated, err := g.load(ctx, key, dest)
 	if err != nil {
@@ -235,7 +236,7 @@ func (g *Group) Get(ctx context.Context, key string, dest Sink) error {
 	return setSinkView(dest, value)
 }
 
-// load loads key either by invoking the getter locally or by sending it to another machine.
+// load 通过调用本地的getter或者通过把它发送到另一个节点来加载key
 func (g *Group) load(ctx context.Context, key string, dest Sink) (value ByteView, destPopulated bool, err error) {
 	g.Stats.Loads.Add(1)
 	viewi, err := g.loadGroup.Do(key, func() (interface{}, error) {
@@ -246,10 +247,14 @@ func (g *Group) load(ctx context.Context, key string, dest Sink) (value ByteView
 		// being run twice, serially.  If we don't check the cache again,
 		// cache.nbytes would be incremented below even though there will
 		// be only one entry for this key.
-		//
+		// 再次检查缓存，因为singleflight只能删除重复并发的调用。 2个并发请求可能会丢失高速缓存，从而导致2个load（）调用。
+		// 不幸的goroutine调度会导致此回调连续运行两次。 如果我们不再次检查缓存，
+		//  即使此键只有一个条目，cache.nbytes也会增加到下面。
+
 		// Consider the following serialized event ordering for two
 		// goroutines in which this callback gets called twice for the
 		// same key:
+		// 考虑以下针对两个goroutine的序列化事件顺序，其中针对同一键对该回调调用两次
 		// 1: Get("key")
 		// 2: Get("key")
 		// 1: lookupCache("key")
@@ -264,21 +269,27 @@ func (g *Group) load(ctx context.Context, key string, dest Sink) (value ByteView
 			g.Stats.CacheHits.Add(1)
 			return value, nil
 		}
+
 		g.Stats.LoadsDeduped.Add(1)
+
 		var value ByteView
 		var err error
+		// 通过key找到peer
 		if peer, ok := g.peers.PickPeer(key); ok {
+			// 通过peer找到value
 			value, err = g.getFromPeer(ctx, peer, key)
 			if err == nil {
 				g.Stats.PeerLoads.Add(1)
 				return value, nil
 			}
+			// 没能从peer中获取到数据
 			g.Stats.PeerErrors.Add(1)
 			// TODO(bradfitz): log the peer's error? keep
 			// log of the past few for /groupcachez?  It's
 			// probably boring (normal task movement), so not
 			// worth logging I imagine.
 		}
+		// 没能找到peer，就从本地查找
 		value, err = g.getLocally(ctx, key, dest)
 		if err != nil {
 			g.Stats.LocalLoadErrs.Add(1)
@@ -286,6 +297,7 @@ func (g *Group) load(ctx context.Context, key string, dest Sink) (value ByteView
 		}
 		g.Stats.LocalLoads.Add(1)
 		destPopulated = true // only one caller of load gets this return value
+		//
 		g.populateCache(key, value, &g.mainCache)
 		return value, nil
 	})
@@ -335,16 +347,19 @@ func (g *Group) lookupCache(key string) (value ByteView, ok bool) {
 	return
 }
 
+// 将key和value加入到缓存中
 func (g *Group) populateCache(key string, value ByteView, cache *cache) {
 	if g.cacheBytes <= 0 {
 		return
 	}
+	// 加入到cache中
 	cache.add(key, value)
 
 	// Evict items from cache(s) if necessary.
 	for {
 		mainBytes := g.mainCache.bytes()
 		hotBytes := g.hotCache.bytes()
+		// mainBytes和hotBytes没有超过最大值限制，不做清理工作
 		if mainBytes+hotBytes <= g.cacheBytes {
 			return
 		}
@@ -353,24 +368,23 @@ func (g *Group) populateCache(key string, value ByteView, cache *cache) {
 		// It should be something based on measurements and/or
 		// respecting the costs of different resources.
 		victim := &g.mainCache
+		// hotBytes 大于 mainCache/8时，就清理hotCache，否则清理mainCache
 		if hotBytes > mainBytes/8 {
 			victim = &g.hotCache
 		}
+		// 清除最久没有使用的
 		victim.removeOldest()
 	}
 }
 
-// CacheType represents a type of cache.
+// CacheType 缓存的类型
 type CacheType int
 
 const (
-	// The MainCache is the cache for items that this peer is the
-	// owner for.
+	// The MainCache 是当前peer缓存的items
 	MainCache CacheType = iota + 1
 
-	// The HotCache is the cache for items that seem popular
-	// enough to replicate to this node, even though it's not the
-	// owner.
+	// The HotCache 是频繁使用的items，它可以是从其他node中复制过来的
 	HotCache
 )
 
@@ -386,17 +400,15 @@ func (g *Group) CacheStats(which CacheType) CacheStats {
 	}
 }
 
-// cache is a wrapper around an *lru.Cache that adds synchronization,
-// makes values always be ByteView, and counts the size of all keys and
-// values.
 type cache struct {
 	mu         sync.RWMutex
-	nbytes     int64 // of all keys and values
+	nbytes     int64 // 所有key和value的大小
 	lru        *lru.Cache
-	nhit, nget int64
-	nevict     int64 // number of evictions
+	nhit, nget int64 //命中数、get请求数
+	nevict     int64 // 清除的item的数量
 }
 
+// cache的统计信息：所有key和value的大小、是否锁定、get请求的数量、命中的数量、清除item的数量
 func (c *cache) stats() CacheStats {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -409,9 +421,11 @@ func (c *cache) stats() CacheStats {
 	}
 }
 
+// 将key和value加入缓存
 func (c *cache) add(key string, value ByteView) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	// 当lru为空的时候，就new一个lru，并定义lru满的时候的清除数据的回调方法
 	if c.lru == nil {
 		c.lru = &lru.Cache{
 			OnEvicted: func(key lru.Key, value interface{}) {
@@ -422,12 +436,15 @@ func (c *cache) add(key string, value ByteView) {
 		}
 	}
 	c.lru.Add(key, value)
+	// 更新key和value的大小
 	c.nbytes += int64(len(key)) + int64(value.Len())
 }
 
+// 通过key从lru中获取item
 func (c *cache) get(key string) (value ByteView, ok bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
 	c.nget++
 	if c.lru == nil {
 		return
@@ -436,10 +453,12 @@ func (c *cache) get(key string) (value ByteView, ok bool) {
 	if !ok {
 		return
 	}
+	// 命中
 	c.nhit++
 	return vi.(ByteView), true
 }
 
+// 从lru中移除最久没有使用的数据
 func (c *cache) removeOldest() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -448,12 +467,14 @@ func (c *cache) removeOldest() {
 	}
 }
 
+// 返回所有key和value的和
 func (c *cache) bytes() int64 {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.nbytes
 }
 
+// 返回lru的长度
 func (c *cache) items() int64 {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -467,7 +488,7 @@ func (c *cache) itemsLocked() int64 {
 	return int64(c.lru.Len())
 }
 
-// An AtomicInt is an int64 to 原子访问
+// An AtomicInt is an int64 to 原子操作
 type AtomicInt int64
 
 // Add atomically adds n to i.
@@ -484,7 +505,7 @@ func (i *AtomicInt) String() string {
 	return strconv.FormatInt(i.Get(), 10)
 }
 
-// CacheStats are returned by stats accessors on Group.
+// CacheStats 统计信息，are returned by stats accessors on Group.
 type CacheStats struct {
 	Bytes     int64
 	Items     int64

@@ -232,7 +232,7 @@ func (h *httpGetter) Get(ctx context.Context, in *pb.GetRequest, out *pb.GetResp
 	// 从buffer pool中获取一个
 	b := bufferPool.Get().(*bytes.Buffer)
 	b.Reset()
-	// 在用完后归还到pool中
+	// 在用完后归还到sync pool中
 	defer bufferPool.Put(b)
 
 	_, err = io.Copy(b, res.Body)
